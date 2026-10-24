@@ -56,6 +56,37 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon test lint :app:assembleDebug --stacktrace
 
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install and launch on Android 16 emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            adb logcat -c
+            adb install -r project/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -W -n com.verdant.os/.MainActivity
+            sleep 8
+            pid="$(adb shell pidof -s com.verdant.os | tr -d '\\r')"
+            if [ -z "$pid" ]; then
+              echo "Verdant OS process not running after launch."
+              adb logcat -d -t 4000
+              exit 1
+            fi
+            if adb logcat -d -s AndroidRuntime:E | grep -E "FATAL EXCEPTION|Process: com\\.verdant\\.os"; then
+              echo "Fatal Android runtime error detected after launch."
+              exit 1
+            fi
+            echo "Verdant OS launched successfully on Android 16 emulator (PID $pid)."
+
       - name: Upload debug APK
         if: always() && hashFiles('project/app/build/outputs/apk/debug/*.apk') != ''
         uses: actions/upload-artifact@v7.0.2
