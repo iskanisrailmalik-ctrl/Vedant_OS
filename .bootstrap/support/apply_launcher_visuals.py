@@ -1,156 +1,106 @@
 #!/usr/bin/env python3
-"""Apply PNG-first visuals to Verdant OS and generate high-resolution image resources."""
+"""Apply high-quality photographic PNG assets and animation to the Verdant OS launcher."""
 from __future__ import annotations
-import math, random, subprocess, sys
+
+import os
+import subprocess
+import sys
+from io import BytesIO
 from pathlib import Path
+from urllib.request import Request, urlopen
+
+WALLPAPER_URL = (
+    "https://images.unsplash.com/photo-1719530910202-9f791d646ee6"
+    "?fm=jpg&fit=crop&w=1080&h=2400&q=88"
+)
+WALLPAPER_CREDIT = (
+    "https://unsplash.com/photos/the-sun-is-shining-through-the-trees-in-the-forest-iLGdHvAQHUc"
+)
+WALLPAPER_SIZE = (1080, 2400)
+
 
 def pillow():
     try:
-        from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
-        return Image, ImageDraw, ImageFilter, ImageEnhance
+        from PIL import Image, ImageEnhance, ImageOps
     except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "Pillow==11.3.0"])
-        from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
-        return Image, ImageDraw, ImageFilter, ImageEnhance
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "--quiet", "Pillow==11.3.0"
+        ])
+        from PIL import Image, ImageEnhance, ImageOps
+    return Image, ImageEnhance, ImageOps
+
 
 def write(path: Path, text: str):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text.strip() + "\n", encoding="utf-8")
 
-def bezier(a,b,c,d,n=32):
-    pts=[]
-    for i in range(n+1):
-        t=i/n; u=1-t
-        pts.append((int(u**3*a[0]+3*u*u*t*b[0]+3*u*t*t*c[0]+t**3*d[0]),
-                    int(u**3*a[1]+3*u*u*t*b[1]+3*u*t*t*c[1]+t**3*d[1])))
-    return pts
 
-def make_leaf(Image, ImageDraw, ImageFilter, size, seed):
-    rng=random.Random(seed); w=size; h=int(size*.48)
-    mask=Image.new("L",(w,h),0); md=ImageDraw.Draw(mask)
-    md.polygon([(1,h//2),(int(w*.15),int(h*.2)),(int(w*.43),2),(int(w*.76),int(h*.18)),(w-2,h//2),(int(w*.75),int(h*.82)),(int(w*.42),h-2),(int(w*.15),int(h*.8))],fill=255)
-    grad=Image.new("RGBA",(w,h),(0,0,0,0)); gd=ImageDraw.Draw(grad)
-    c0=rng.choice([(8,48,28),(12,61,34),(18,70,37)])
-    c1=rng.choice([(42,111,49),(55,129,57),(78,143,65)])
-    c2=rng.choice([(117,165,77),(148,184,91),(173,196,107)])
-    for y in range(h):
-        t=y/max(1,h-1)
-        c=tuple(int(c0[k]*(1-t)+c1[k]*t) if t<.52 else int(c1[k]*(1-(t-.52)/.48)+c2[k]*((t-.52)/.48)) for k in range(3))
-        gd.line((0,y,w,y),fill=(*c,240))
-    grad.putalpha(mask); out=Image.new("RGBA",(w,h),(0,0,0,0)); out.alpha_composite(grad)
-    d=ImageDraw.Draw(out)
-    d.line([(5,h//2),(w-5,h//2)],fill=(207,230,146,145),width=max(1,w//110))
-    for k in range(1,7):
-        x=int(w*k/8)
-        d.line([(x,h//2),(int(x+w*.10),int(h*.18))],fill=(207,230,149,85),width=1)
-        d.line([(x,h//2),(int(x+w*.10),int(h*.83))],fill=(8,36,23,100),width=1)
-    d.ellipse((int(w*.31),int(h*.27),int(w*.35),int(h*.37)),fill=(255,255,231,150))
-    return out.filter(ImageFilter.GaussianBlur(.25))
+def get_source_bytes() -> bytes:
+    """Accept a local image for offline testing; CI downloads the fixed Unsplash photo."""
+    local_source = os.environ.get("VERDANT_WALLPAPER_SOURCE")
+    if local_source:
+        path = Path(local_source).expanduser()
+        if not path.is_file():
+            raise SystemExit(f"VERDANT_WALLPAPER_SOURCE is not a file: {path}")
+        raw = path.read_bytes()
+    else:
+        request = Request(
+            WALLPAPER_URL,
+            headers={
+                "User-Agent": "VerdantOS-AssetBuilder/1.0",
+                "Accept": "image/jpeg,image/png,image/webp,*/*;q=0.8",
+            },
+        )
+        try:
+            with urlopen(request, timeout=35) as response:
+                if response.status != 200:
+                    raise SystemExit(f"Wallpaper download returned HTTP {response.status}")
+                raw = response.read(20 * 1024 * 1024 + 1)
+        except Exception as exc:
+            raise SystemExit(
+                "Could not download the high-resolution wallpaper from Unsplash. "
+                f"Check network access and retry; URL: {WALLPAPER_URL}; error: {exc}"
+            ) from exc
+    if not raw or len(raw) > 20 * 1024 * 1024:
+        raise SystemExit(f"Wallpaper file size is invalid ({len(raw)} bytes).")
+    return raw
+
 
 def generate(out: Path):
+    """Create a true photographic PNG; do not paint scene artwork from geometric shapes."""
+    Image, ImageEnhance, ImageOps = pillow()
     out.mkdir(parents=True, exist_ok=True)
-    Image, ImageDraw, ImageFilter, ImageEnhance = pillow()
-    W,H=1080,2400; rng=random.Random(42)
-    # Render the nature artwork once as PNG; Compose animates these layers at runtime.
-    line=Image.new("RGB",(1,H)); ld=ImageDraw.Draw(line)
-    top=(4,23,19); mid=(20,64,39); bot=(4,24,17)
-    for y in range(H):
-        t=y/(H-1)
-        if t<.55:
-            q=t/.55; col=tuple(int(top[k]*(1-q)+mid[k]*q) for k in range(3))
-        else:
-            q=(t-.55)/.45; col=tuple(int(mid[k]*(1-q)+bot[k]*q) for k in range(3))
-        ld.point((0,y),fill=col)
-    img=line.resize((W,H),Image.Resampling.BICUBIC).convert("RGBA")
-    glow=Image.new("RGBA",(W,H),(0,0,0,0)); gd=ImageDraw.Draw(glow)
-    gd.ellipse((-300,80,500,930),fill=(221,194,107,62))
-    gd.ellipse((560,110,1370,1070),fill=(77,151,88,58))
-    gd.ellipse((150,970,980,1980),fill=(61,125,72,31))
-    img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(130)))
-    bokeh=Image.new("RGBA",(W,H),(0,0,0,0)); bd=ImageDraw.Draw(bokeh)
-    for _ in range(105):
-        x=rng.randint(-100,W+100); y=rng.randint(0,int(H*.68)); r=rng.choice([3,5,8,13,21])
-        bd.ellipse((x-r,y-r,x+r,y+r),fill=(210,233,147,rng.randint(7,27)))
-    img.alpha_composite(bokeh.filter(ImageFilter.GaussianBlur(18)))
-    # Curved branch silhouettes stay near the edges to preserve a quiet area for widgets.
-    branch=Image.new("RGBA",(W,H),(0,0,0,0)); dr=ImageDraw.Draw(branch)
-    paths=[
-      ((-100,260),(180,330),(230,70),(470,85),38),
-      ((-80,470),(210,440),(300,200),(560,185),23),
-      ((1180,310),(920,410),(890,160),(700,120),33),
-      ((1170,700),(920,620),(900,420),(725,350),22),
-      ((-90,980),(130,870),(90,730),(-30,625),18),
-      ((1110,1320),(930,1180),(1020,1010),(1120,920),18),
-    ]
-    for a,b,c,d,width in paths:
-        pts=bezier(a,b,c,d)
-        dr.line(pts,fill=(2,17,12,180),width=width+10,joint="curve")
-        dr.line([(x-3,y-3) for x,y in pts],fill=(73,84,45,235),width=width,joint="curve")
-        dr.line([(x-5,y-6) for x,y in pts],fill=(148,126,68,75),width=max(2,width//5),joint="curve")
-    img.alpha_composite(branch.filter(ImageFilter.GaussianBlur(1.2)))
-    foliage=Image.new("RGBA",(W,H),(0,0,0,0))
-    for bi,path in enumerate(paths):
-        pts=bezier(*path[:4],n=30)
-        for j in range(18):
-            t=rng.uniform(.12,.98); x,y=pts[min(len(pts)-1,int(t*(len(pts)-1)))]
-            side=-1 if (bi+j)%2 else 1
-            leaf=make_leaf(Image,ImageDraw,ImageFilter,rng.randint(66,138),bi*71+j)
-            leaf=leaf.rotate(side*rng.randint(24,72),resample=Image.Resampling.BICUBIC,expand=True)
-            alpha=leaf.getchannel("A").point(lambda v:int(v*rng.uniform(.45,.85)))
-            leaf.putalpha(alpha)
-            foliage.alpha_composite(leaf,(int(x+side*rng.randint(12,78)-leaf.width/2),int(y+rng.randint(-58,58)-leaf.height/2)))
-    img.alpha_composite(foliage.filter(ImageFilter.GaussianBlur(.55)))
-    # Mango-like fruit forms use a pre-rendered gradient and small highlight droplets.
-    fruitlayer=Image.new("RGBA",(W,H),(0,0,0,0))
-    for i,(cx,cy,scale,angle) in enumerate([(112,375,.74,21),(302,470,.43,-15),(925,365,.60,-17),(960,645,.38,14),(70,800,.33,-23)]):
-        fw,fh=int(172*scale),int(258*scale)
-        mask=Image.new("L",(fw,fh),0); md=ImageDraw.Draw(mask)
-        md.polygon([(int(fw*.45),2),(int(fw*.72),int(fh*.06)),(int(fw*.91),int(fh*.26)),(fw-3,int(fh*.46)),(int(fw*.79),int(fh*.74)),(int(fw*.51),fh-3),(int(fw*.25),int(fh*.84)),(int(fw*.08),int(fh*.58)),(2,int(fh*.36)),(int(fw*.18),int(fh*.14))],fill=255)
-        grad=Image.new("RGBA",(fw,fh),(0,0,0,0)); gd=ImageDraw.Draw(grad)
-        for xx in range(fw):
-            t=xx/max(1,fw-1)
-            if t<.52: c=tuple(int(v*(1-t/.52)+u*(t/.52)) for v,u in zip((39,102,42),(242,188,55)))
-            else: c=tuple(int(v*(1-(t-.52)/.48)+u*((t-.52)/.48)) for v,u in zip((242,188,55),(198,56,34)))
-            gd.line((xx,0,xx,fh),fill=(*c,255))
-        grad.putalpha(mask); fruit=Image.new("RGBA",(fw,fh),(0,0,0,0)); fruit.alpha_composite(grad)
-        fd=ImageDraw.Draw(fruit); fd.ellipse((int(fw*.18),int(fh*.16),int(fw*.39),int(fh*.45)),fill=(255,249,205,85))
-        for n in range(9):
-            dx=rng.randint(int(fw*.15),int(fw*.85)); dy=rng.randint(int(fh*.18),int(fh*.78)); rr=max(1,int(scale*3))
-            fd.ellipse((dx-rr,dy-rr,dx+rr,dy+rr),fill=(255,250,210,115))
-        fruit=fruit.rotate(angle,resample=Image.Resampling.BICUBIC,expand=True)
-        fruitlayer.alpha_composite(fruit,(int(cx-fruit.width/2),int(cy-fruit.height/2)))
-    img.alpha_composite(fruitlayer.filter(ImageFilter.GaussianBlur(.25)))
-    haze=Image.new("RGBA",(W,H),(0,0,0,0)); hd=ImageDraw.Draw(haze)
-    hd.rectangle((0,int(H*.68),W,H),fill=(1,14,10,80))
-    img.alpha_composite(haze.filter(ImageFilter.GaussianBlur(85)))
-    wallpaper=ImageEnhance.Color(img.convert("RGB")).enhance(1.1)
-    base=out/"verdant_garden_wallpaper.png"
-    wallpaper.save(base,format="PNG",optimize=True,compress_level=8)
-    for mode,tint,strength in [
-        ("dawn",(206,125,83),.18),("day",(65,145,79),.09),
-        ("dusk",(83,61,116),.22),("night",(5,18,46),.34),
-    ]:
-        variant=Image.blend(wallpaper,Image.new("RGB",wallpaper.size,tint),strength)
-        variant.save(out/f"verdant_garden_wallpaper_{mode}.png",format="PNG",optimize=True,compress_level=8)
-    # Transparent high-resolution foliage layer drifts gently over the background.
-    overlay=Image.new("RGBA",(W,H),(0,0,0,0)); rng=random.Random(314)
-    for i in range(44):
-        left=rng.random()<.5
-        x=rng.randint(-50,190) if left else rng.randint(W-190,W+50)
-        y=rng.randint(-60,H-60)
-        leaf=make_leaf(Image,ImageDraw,ImageFilter,rng.randint(68,144),700+i)
-        leaf=leaf.rotate(rng.randint(-75,75),resample=Image.Resampling.BICUBIC,expand=True)
-        if rng.random()<.5: leaf=leaf.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-        leaf.putalpha(leaf.getchannel("A").point(lambda v:int(v*.58)))
-        overlay.alpha_composite(leaf,(x,y))
-    od=ImageDraw.Draw(overlay)
-    for _ in range(60):
-        x=rng.randint(8,W-8); y=rng.randint(40,H-60); r=rng.choice([1,2,3])
-        od.ellipse((x-r,y-r,x+r,y+r),fill=(226,240,165,rng.randint(24,80)))
-    overlay=overlay.filter(ImageFilter.GaussianBlur(.35))
-    overlay.save(out/"verdant_leaves_overlay.png",format="PNG",optimize=True,compress_level=8)
+    raw = get_source_bytes()
+    try:
+        with Image.open(BytesIO(raw)) as source:
+            source.load()
+            if source.width < 720 or source.height < 1200:
+                raise SystemExit(
+                    f"Wallpaper source is too small ({source.width}x{source.height}); "
+                    "expected at least 720x1200 pixels."
+                )
+            wallpaper = ImageOps.fit(
+                source.convert("RGB"),
+                WALLPAPER_SIZE,
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.47),
+            )
+    except SystemExit:
+        raise
+    except Exception as exc:
+        raise SystemExit(f"Downloaded wallpaper is not a valid image: {exc}") from exc
 
-def main(project: Path):
+    # Color/contrast processing preserves real photographic detail; no vector painting.
+    wallpaper = ImageEnhance.Color(wallpaper).enhance(1.08)
+    wallpaper = ImageEnhance.Contrast(wallpaper).enhance(1.05)
+    wallpaper = ImageEnhance.Brightness(wallpaper).enhance(0.84)
+    destination = out / "verdant_garden_wallpaper.png"
+    wallpaper.save(destination, format="PNG", optimize=True, compress_level=7)
+    if destination.stat().st_size < 150_000:
+        raise SystemExit("Generated wallpaper PNG is unexpectedly small; refusing a low-detail asset.")
+
+
+
     project=project.resolve()
     design=project/"core/design/src/main"
     renderer=project/"engine/render/src/main"
@@ -162,12 +112,16 @@ def main(project: Path):
         (rres/image.name).write_bytes(image.read_bytes())
 
     scene=r'''package com.verdant.os.core.design
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -175,28 +129,56 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import kotlin.math.abs
+import kotlinx.coroutines.isActive
 @Composable
 fun GardenScene(modifier: Modifier = Modifier, reduceMotion: Boolean = false, windLevel: Int = 1, timeMode: String = "AUTO") {
-    val hour=rememberGardenTime().hour
-    val mode=if(timeMode=="AUTO") when(hour) { in 5..7->"DAWN"; in 8..16->"DAY"; in 17..19->"DUSK"; else->"NIGHT" } else timeMode
-    val transition=rememberInfiniteTransition(label="verdant-image-motion")
-    val breeze by transition.animateFloat(-1f,1f,infiniteRepeatable(tween(11000,easing=LinearEasing),RepeatMode.Reverse),label="breeze")
-    val drift by transition.animateFloat(1f,-1f,infiniteRepeatable(tween(17000,easing=LinearEasing),RepeatMode.Reverse),label="leaf-drift")
-    val motion=if(reduceMotion) 0f else breeze
-    val leafMotion=if(reduceMotion) 0f else drift
-    val wind=when(windLevel.coerceIn(0,2)){0->0f;1->5f;else->10f}
-    val tint=when(mode){"DAWN"->Color(0xFFBE8058);"DAY"->Color(0xFF4F9C69);"DUSK"->Color(0xFF6E507C);else->Color(0xFF07172A)}
+    val hour = rememberGardenTime().hour
+    val mode = if (timeMode == "AUTO") when (hour) {
+        in 5..7 -> "DAWN"
+        in 8..16 -> "DAY"
+        in 17..19 -> "DUSK"
+        else -> "NIGHT"
+    } else timeMode
+    val imageMotion = remember { Animatable(0f) }
+    LaunchedEffect(reduceMotion, windLevel) {
+        if (reduceMotion || windLevel <= 0) {
+            imageMotion.snapTo(0f)
+        } else {
+            while (isActive) {
+                imageMotion.animateTo(1f, tween(4500, easing = LinearEasing))
+                imageMotion.animateTo(-1f, tween(9000, easing = LinearEasing))
+                imageMotion.animateTo(0f, tween(4500, easing = LinearEasing))
+            }
+        }
+    }
+    val motion = if (reduceMotion || windLevel <= 0) 0f else imageMotion.value
+    val zoom = if (reduceMotion) 1.045f else 1.055f + abs(motion) * 0.014f
+    val tint = when (mode) {
+        "DAWN" -> Color(0xFFCE865D)
+        "DAY" -> Color(0xFF4F9B69)
+        "DUSK" -> Color(0xFF665078)
+        else -> Color(0xFF07172B)
+    }
+    val tintAlpha = when (mode) {
+        "DAWN" -> 0.10f
+        "DAY" -> 0.04f
+        "DUSK" -> 0.15f
+        else -> 0.27f
+    }
     Box(modifier.fillMaxSize().clipToBounds()) {
-        Image(painterResource(R.drawable.verdant_garden_wallpaper),null,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize().graphicsLayer {
-            translationX=motion*wind; translationY=-motion*2.5f
-            val s=1.055f+abs(motion)*.012f; scaleX=s; scaleY=s
-        })
-        Image(painterResource(R.drawable.verdant_leaves_overlay),null,contentScale=ContentScale.FillBounds,modifier=Modifier.fillMaxSize().graphicsLayer {
-            translationX=leafMotion*wind*1.25f; translationY=-leafMotion*3.5f
-            rotationZ=leafMotion*if(windLevel<=0) 0f else .24f*windLevel
-            alpha=if (reduceMotion) 0.44f else 0.72f
-        })
-        Box(Modifier.fillMaxSize().background(tint.copy(alpha=when(mode){"NIGHT"->.29f;"DUSK"->.16f;else->.07f})))
+        Image(
+            painter = painterResource(R.drawable.verdant_garden_wallpaper),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                translationX = motion * windLevel.coerceIn(0, 2) * 4.2f
+                translationY = -motion * 2.5f
+                scaleX = zoom
+                scaleY = zoom
+            },
+        )
+        // Animate the PNG as an image layer; no custom Canvas paths or shape painting.
+        Box(Modifier.fillMaxSize().background(tint.copy(alpha = tintAlpha)))
     }
 }
 '''
@@ -276,6 +258,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import android.graphics.RectF
 import android.os.Handler
 import android.os.HandlerThread
@@ -292,6 +276,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.Calendar
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sin
 class VerdantWallpaperService : WallpaperService() {
@@ -300,17 +285,13 @@ class VerdantWallpaperService : WallpaperService() {
     private inner class GardenEngine : Engine() {
         private val worker=HandlerThread("VerdantWallpaperRender").apply { start() }
         private val handler=Handler(worker.looper)
+        // Android requires drawing to the wallpaper surface; this Canvas only blits the PNG bitmap.
         private val paint=Paint(Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG)
         private val engineScope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
         private val preferences=VerdantPreferences(this@VerdantWallpaperService)
-        private val backgrounds:Map<String,Bitmap> by lazy {
-            mapOf("DAWN" to BitmapFactory.decodeResource(resources, R.drawable.verdant_garden_wallpaper_dawn),
-                "DAY" to BitmapFactory.decodeResource(resources, R.drawable.verdant_garden_wallpaper_day),
-                "DUSK" to BitmapFactory.decodeResource(resources, R.drawable.verdant_garden_wallpaper_dusk),
-                "NIGHT" to BitmapFactory.decodeResource(resources, R.drawable.verdant_garden_wallpaper_night))
-                .mapValues { (_, value) -> checkNotNull(value) }
+        private val background:Bitmap by lazy {
+            checkNotNull(BitmapFactory.decodeResource(resources,R.drawable.verdant_garden_wallpaper))
         }
-        private val foliage:Bitmap by lazy { checkNotNull(BitmapFactory.decodeResource(resources,R.drawable.verdant_leaves_overlay)) }
         @Volatile private var visible=false
         @Volatile private var surfaceAvailable=false
         @Volatile private var motionEnabled=true
@@ -362,24 +343,28 @@ class VerdantWallpaperService : WallpaperService() {
         }
         private fun drawFrame() {
             var canvas:Canvas?=null
-            try { canvas=surfaceHolder.lockCanvas(); if(canvas!=null)renderBitmaps(canvas) }
+            try { canvas=surfaceHolder.lockCanvas(); if(canvas!=null)renderBitmap(canvas) }
             catch(_:IllegalArgumentException) { }
             catch(_:IllegalStateException) { }
-            finally { if(canvas!=null)try { surfaceHolder.unlockCanvasAndPost(canvas) } catch(error:Exception) { Log.w(TAG,"Wallpaper surface changed while posting bitmap frame",error) } }
+            finally {
+                if(canvas!=null)try { surfaceHolder.unlockCanvasAndPost(canvas) }
+                catch(error:Exception) { Log.w(TAG,"Wallpaper surface changed while posting PNG frame",error) }
+            }
         }
-        private fun renderBitmaps(canvas:Canvas) {
+        private fun renderBitmap(canvas:Canvas) {
+            val bg=background
             val mode=if(timeMode!="AUTO")timeMode else when(Calendar.getInstance().get(Calendar.HOUR_OF_DAY)){in 5..7->"DAWN";in 8..16->"DAY";in 17..19->"DUSK";else->"NIGHT"}
-            val bg=backgrounds[mode]?:backgrounds.getValue("DAY")
+            val tint=when(mode){"DAWN"->0x25F3A36A;"DAY"->0x164F9B69;"DUSK"->0x2D665078;else->0x4207172B}
             val w=canvas.width.toFloat();val h=canvas.height.toFloat()
-            val scale=max(w/bg.width,h/bg.height)*1.06f;val dw=bg.width*scale;val dh=bg.height*scale
-            val wave=if(motionEnabled)sin(frame/42.0).toFloat() else 0f
-            val sway=wave*windLevel.coerceIn(0,2)*w*.0035f
-            val page=horizontalOffset*(dw-w).coerceAtLeast(0f)*.35f
-            val top=(h-dh)/2f+wave*2f;val left=(w-dw)/2f-page+sway
+            val phase=if(motionEnabled&&windLevel>0)sin(frame/48.0).toFloat() else 0f
+            val scale=max(w/bg.width,h/bg.height)*(1.055f+if(motionEnabled&&windLevel>0)abs(phase)*0.012f else 0f)
+            val dw=bg.width*scale;val dh=bg.height*scale
+            val page=horizontalOffset*(dw-w).coerceAtLeast(0f)*0.26f
+            val drift=phase*windLevel.coerceIn(0,2)*w*0.0035f
+            val left=(w-dw)/2f-page+drift;val top=(h-dh)/2f+phase*2.2f
+            paint.colorFilter=PorterDuffColorFilter(tint,PorterDuff.Mode.SRC_ATOP)
             canvas.drawBitmap(bg,null,RectF(left,top,left+dw,top+dh),paint)
-            val leaf=foliage;val ls=max(w/leaf.width,h/leaf.height)*1.08f;val lw=leaf.width*ls;val lh=leaf.height*ls
-            val drift=if(motionEnabled)sin(frame/58.0).toFloat()*windLevel.coerceIn(0,2)*w*.006f else 0f
-            canvas.drawBitmap(leaf,null,RectF((w-lw)/2+drift,(h-lh)/2,(w+lw)/2+drift,(h+lh)/2),paint)
+            paint.colorFilter=null
             frame++
         }
     }
@@ -404,14 +389,27 @@ class VerdantWallpaperService : WallpaperService() {
     readme=project/"README.md"
     if readme.exists():
         t=readme.read_text(encoding="utf-8")
-        t=t.replace("- A procedural garden backdrop, fruit-style app icons, branch-inspired home screen, searchable lazy app drawer and premium dark-green surfaces.",
-                    "- High-resolution PNG garden wallpaper and transparent leaf overlays, animated with Compose transforms and reduced-motion controls.\n- A real home-screen launcher: installed apps use Android-provided icons and open through LauncherApps, with a spring press animation.")
-        t=t.replace("- A live wallpaper service using a dedicated render thread, day/night palette, tree/leaf composition and visibility-aware frame scheduling. Surface availability is tracked separately from visibility so surface recreation does not accidentally halt rendering.",
-                    "- A live wallpaper service that composites pre-rendered PNG variants and transparent foliage on a dedicated render thread; it does not paint custom leaf or fruit shapes each frame.")
-        t=t.replace("- This starter's wallpaper renderer is a **Canvas-based reference implementation** on a dedicated render thread. It is not yet the spec's OpenGL ES 3.0 renderer, and it has not been validated against the battery, frame-time or memory budgets on a Moto Edge 50 Fusion. That migration must be benchmark-led.",
-                    "- Launcher artwork is PNG-first and animated as image layers. Android's WallpaperService still uses its required surface Canvas only to composite bitmap layers; it no longer uses Paint paths or circles to draw the artwork.")
+        t=t.replace(
+            "- A procedural garden backdrop, fruit-style app icons, branch-inspired home screen, searchable lazy app drawer and premium dark-green surfaces.",
+            "- A high-resolution photographic PNG wallpaper animated with gentle parallax and zoom transforms that respect Reduce Motion.\n- A genuine Android HOME launcher: installed applications use Android-provided icons and real launch targets.",
+        )
+        t=t.replace(
+            "- A live wallpaper service using a dedicated render thread, day/night palette, tree/leaf composition and visibility-aware frame scheduling. Surface availability is tracked separately from visibility so surface recreation does not accidentally halt rendering.",
+            "- A live wallpaper service that animates a pre-rendered PNG bitmap on Android's wallpaper surface; no hand-painted Canvas paths or shapes are used for the scenery.",
+        )
+        t=t.replace(
+            "- This starter's wallpaper renderer is a **Canvas-based reference implementation** on a dedicated render thread. It is not yet the spec's OpenGL ES 3.0 renderer, and it has not been validated against the battery, frame-time or memory budgets on a Moto Edge 50 Fusion. That migration must be benchmark-led.",
+            "- The scenery is a PNG image asset, not procedurally painted artwork. Android's WallpaperService uses Canvas only as the required surface to composite the PNG bitmap. CI builds do not replace physical-device testing on the Moto Edge 50 Fusion.",
+        )
+        if "Wallpaper image credit" not in t:
+            t += (
+                "\n\n## Wallpaper image credit\n\n"
+                "The default nature photograph is sourced from Unsplash under the Unsplash License: "
+                f"[view photo and contributor details]({WALLPAPER_CREDIT}). The build crops and color-grades "
+                "the source into a local PNG resource; the app makes no runtime image-network requests.\n"
+            )
         readme.write_text(t,encoding="utf-8")
-    print("Applied PNG-first launcher scenes, animated bitmap layers, real package icons, and launcher HOME configuration.")
+
 
 if __name__ == "__main__":
     if len(sys.argv)!=2: raise SystemExit("Usage: apply_launcher_visuals.py PROJECT_DIR")
