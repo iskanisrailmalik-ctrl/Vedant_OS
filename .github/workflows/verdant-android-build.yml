@@ -75,7 +75,7 @@ jobs:
             adb install -r project/app/build/outputs/apk/debug/app-debug.apk
             adb shell am start -W -n com.verdant.os/.MainActivity
             sleep 8
-            pid="$(adb shell pidof -s com.verdant.os | tr -d '\\r')"
+            pid="$(adb shell pidof -s com.verdant.os | tr -d '\r')"
             if [ -z "$pid" ]; then
               echo "Verdant OS process not running after launch."
               adb logcat -d -t 4000
