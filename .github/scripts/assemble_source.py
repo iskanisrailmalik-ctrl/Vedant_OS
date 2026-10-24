@@ -215,6 +215,18 @@ def main() -> None:
             )
             drawer_screen.write_text(drawer_text, encoding="utf-8")
 
+    # Android RemoteViews does not allow a generic android.view.View child.
+    # A blank TextView supports the same narrow accent stripe and is RemoteViews-safe.
+    widget_layout = DESTINATION / "feature/widgets/src/main/res/layout/widget_sign.xml"
+    if widget_layout.is_file():
+        layout_text = widget_layout.read_text(encoding="utf-8")
+        old_accent = '<View android:layout_width="4dp" android:layout_height="match_parent" android:background="#8CCF5A" android:layout_marginEnd="12dp" />'
+        new_accent = '<TextView android:layout_width="4dp" android:layout_height="match_parent" android:background="#8CCF5A" android:layout_marginEnd="12dp" android:text="" />'
+        if old_accent in layout_text:
+            widget_layout.write_text(layout_text.replace(old_accent, new_accent, 1), encoding="utf-8")
+        elif new_accent not in layout_text:
+            fail("sign widget layout's unsupported generic View was not found")
+
     # Rehydrate platform-independent test/support files that were introduced
     # after the original, checksum-pinned source archive was cut.
     support = ROOT / ".bootstrap" / "support"
