@@ -321,7 +321,7 @@ class VerdantWallpaperService : WallpaperService() {
         private var lastInteraction=SystemClock.uptimeMillis()
         private val loop=object:Runnable {
             override fun run() {
-                if(!visible||!surfaceAvailable)return
+                if (!visible || !surfaceAvailable) return
                 drawFrame()
                 if(motionEnabled&&visible) handler.postDelayed(this,if(SystemClock.uptimeMillis()-lastInteraction>10000L)42L else 24L)
             }
