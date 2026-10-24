@@ -173,7 +173,7 @@ def main() -> None:
     print(f"Verified archive size: {len(package)} bytes.")
     print(f"Verified archive SHA-256: {actual_archive_hash}")
     print(f"Extracted {len(members)} files to {DESTINATION.relative_to(ROOT)}/")
-    print("Applied deterministic stable-SDK overlay: compileSdk/targetSdk 36.")
+    print("Applied deterministic API 37 overlay and aligned Java bytecode target to JVM 21.")
 
 if __name__ == "__main__":
     main()
