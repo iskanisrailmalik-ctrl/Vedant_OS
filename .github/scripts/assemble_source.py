@@ -174,6 +174,18 @@ def main() -> None:
         old_text = nested_workflow.read_text(encoding="utf-8")
         nested_workflow.write_text(old_text.replace("platforms;android-37", "platforms;android-36"), encoding="utf-8")
 
+    drawer_screen = DESTINATION / "feature/drawer/src/main/java/com/verdant/os/feature/drawer/DrawerScreen.kt"
+    if drawer_screen.is_file():
+        drawer_text = drawer_screen.read_text(encoding="utf-8")
+        background_import = "import androidx.compose.foundation.background"
+        if background_import not in drawer_text:
+            drawer_text = drawer_text.replace(
+                "import androidx.compose.foundation.layout.*",
+                "import androidx.compose.foundation.layout.*\\n" + background_import,
+                1,
+            )
+            drawer_screen.write_text(drawer_text, encoding="utf-8")
+
     # Rehydrate platform-independent test/support files that were introduced
     # after the original, checksum-pinned source archive was cut.
     support = ROOT / ".bootstrap" / "support"
