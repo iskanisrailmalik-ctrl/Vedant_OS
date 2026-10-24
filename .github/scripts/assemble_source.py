@@ -174,6 +174,35 @@ def main() -> None:
         old_text = nested_workflow.read_text(encoding="utf-8")
         nested_workflow.write_text(old_text.replace("platforms;android-37", "platforms;android-36"), encoding="utf-8")
 
+    # Compile the app module against DataStore Preferences because the app directly
+    # calls public methods whose generated signatures mention Preferences.
+    app_build = DESTINATION / "app" / "build.gradle.kts"
+    if app_build.is_file():
+        app_build_text = app_build.read_text(encoding="utf-8")
+        dependency = "implementation(libs.androidx.datastore.preferences)"
+        if dependency not in app_build_text:
+            anchor = '    implementation(project(":core:data"))'
+            if anchor not in app_build_text:
+                fail("app build file lacks the core:data dependency anchor")
+            app_build_text = app_build_text.replace(anchor, anchor + "\n    " + dependency, 1)
+            app_build.write_text(app_build_text, encoding="utf-8")
+
+    app_root = DESTINATION / "app" / "src/main/java/com/verdant/os/VerdantAppRoot.kt"
+    if app_root.is_file():
+        app_root_text = app_root.read_text(encoding="utf-8")
+        items_import = "import androidx.compose.foundation.lazy.grid.items"
+        if items_import not in app_root_text:
+            app_root_text = app_root_text.replace(
+                "import androidx.compose.foundation.layout.*",
+                "import androidx.compose.foundation.layout.*\n" + items_import,
+                1,
+            )
+        app_root_text = app_root_text.replace(
+            "androidx.compose.foundation.lazy.grid.items(apps.take(24)",
+            "items(apps.take(24)",
+        )
+        app_root.write_text(app_root_text, encoding="utf-8")
+
     drawer_screen = DESTINATION / "feature/drawer/src/main/java/com/verdant/os/feature/drawer/DrawerScreen.kt"
     if drawer_screen.is_file():
         drawer_text = drawer_screen.read_text(encoding="utf-8")
