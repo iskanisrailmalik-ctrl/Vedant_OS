@@ -89,10 +89,49 @@ def main() -> None:
     except zipfile.BadZipFile as exc:
         fail(f"invalid ZIP archive: {exc}")
 
+    # This checked-in bootstrap ZIP was produced before hosted SDK verification.
+    # Keep its SHA-256 immutable, then apply a deterministic source overlay based
+    # on the official stable platform available to the runner (Android 16 / API 36).
+    # Android 17 / API 37 is beta as of 2026-10-24 and is not in the stable SDK channel.
+    for path in DESTINATION.rglob("*.gradle.kts"):
+        old_text = path.read_text(encoding="utf-8")
+        new_text = old_text.replace("compileSdk = 37", "compileSdk = 36")
+        new_text = new_text.replace("targetSdk = 37", "targetSdk = 36")
+        if new_text != old_text:
+            path.write_text(new_text, encoding="utf-8")
+
+    verifier = DESTINATION / "scripts" / "verify_project.py"
+    if verifier.exists():
+        old_text = verifier.read_text(encoding="utf-8")
+        new_text = old_text.replace("EXPECTED_COMPILE_SDK = 37", "EXPECTED_COMPILE_SDK = 36")
+        new_text = new_text.replace(r"targetSdk\\s*=\\s*37\\b", r"targetSdk\\s*=\\s*36\\b")
+        new_text = new_text.replace("application targetSdk is 37", "application targetSdk is 36")
+        verifier.write_text(new_text, encoding="utf-8")
+
+    nested_workflow = DESTINATION / ".github" / "workflows" / "android.yml"
+    if nested_workflow.exists():
+        old_text = nested_workflow.read_text(encoding="utf-8")
+        nested_workflow.write_text(old_text.replace("platforms;android-37", "platforms;android-36"), encoding="utf-8")
+
+    docs = [DESTINATION / name for name in ("README.md", "BUILD_GUIDE_WINDOWS.md", "ARCHITECTURE.md", "VALIDATION_MATRIX.md")]
+    for path in docs:
+        if path.exists():
+            old_text = path.read_text(encoding="utf-8")
+            new_text = old_text.replace("Android SDK Platform 37", "Android SDK Platform 36")
+            new_text = new_text.replace("Android SDK Platform **37**", "Android SDK Platform **36**")
+            new_text = new_text.replace("Android 17 / API 37", "Android 16 / API 36")
+            new_text = new_text.replace("API 37", "API 36")
+            new_text = new_text.replace("Android API 37", "Android API 36")
+            new_text = new_text.replace("compile/target API **37**", "compile/target API **36**")
+            new_text = new_text.replace("with API 37 installed", "with API 36 installed")
+            new_text = new_text.replace("Android 17 (API 37)", "Android 16 (API 36)")
+            path.write_text(new_text, encoding="utf-8")
+
     print(f"Verified {len(PARTS)} source chunks.")
     print(f"Verified archive size: {len(package)} bytes.")
     print(f"Verified archive SHA-256: {actual_archive_hash}")
     print(f"Extracted {len(members)} files to {DESTINATION.relative_to(ROOT)}/")
+    print("Applied deterministic stable-SDK overlay: compileSdk/targetSdk 36.")
 
 if __name__ == "__main__":
     main()
