@@ -6,6 +6,8 @@ import base64
 import hashlib
 import re
 import shutil
+import subprocess
+import sys
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -259,6 +261,12 @@ def main() -> None:
         shutil.copy2(source, destination)
         if name == "test_physics.sh":
             destination.chmod(destination.stat().st_mode | 0o111)
+
+    # Render image-first launcher assets and replace runtime Canvas artwork with PNG layers.
+    launcher_patch = support / "apply_launcher_visuals.py"
+    if not launcher_patch.is_file():
+        fail(f"missing launcher visual patch: {launcher_patch.relative_to(ROOT)}")
+    subprocess.check_call([sys.executable, str(launcher_patch), str(DESTINATION)])
 
     print(f"Verified {len(PARTS)} source chunks.")
     print(f"Verified archive size: {len(package)} bytes.")
