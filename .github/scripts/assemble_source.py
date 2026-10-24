@@ -181,7 +181,7 @@ def main() -> None:
         if background_import not in drawer_text:
             drawer_text = drawer_text.replace(
                 "import androidx.compose.foundation.layout.*",
-                "import androidx.compose.foundation.layout.*\\n" + background_import,
+                "import androidx.compose.foundation.layout.*\n" + background_import,
                 1,
             )
             drawer_screen.write_text(drawer_text, encoding="utf-8")
