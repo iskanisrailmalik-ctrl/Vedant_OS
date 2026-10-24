@@ -100,7 +100,7 @@ def generate(out: Path):
         raise SystemExit("Generated wallpaper PNG is unexpectedly small; refusing a low-detail asset.")
 
 
-
+def main(project: Path):
     project=project.resolve()
     design=project/"core/design/src/main"
     renderer=project/"engine/render/src/main"
