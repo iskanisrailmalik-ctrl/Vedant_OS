@@ -155,6 +155,20 @@ def main() -> None:
             new_text = new_text.replace("Android 17 (API 37)", "Android 16 (API 36)")
             path.write_text(new_text, encoding="utf-8")
 
+    # Rehydrate platform-independent test/support files that were introduced
+    # after the original, checksum-pinned source archive was cut.
+    support = ROOT / ".bootstrap" / "support"
+    scripts_dir = DESTINATION / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("PhysicsHarness.kt", "test_physics.sh", "test_physics.ps1"):
+        source = support / name
+        if not source.is_file():
+            fail(f"missing support file: {source.relative_to(ROOT)}")
+        destination = scripts_dir / name
+        shutil.copy2(source, destination)
+        if name == "test_physics.sh":
+            destination.chmod(destination.stat().st_mode | 0o111)
+
     print(f"Verified {len(PARTS)} source chunks.")
     print(f"Verified archive size: {len(package)} bytes.")
     print(f"Verified archive SHA-256: {actual_archive_hash}")
