@@ -184,6 +184,7 @@ fun GardenScene(modifier: Modifier = Modifier, reduceMotion: Boolean = false, wi
 '''
     icon=r'''package com.verdant.os.core.design
 import android.content.ComponentName
+import android.content.Context
 import android.graphics.drawable.Drawable
 import android.widget.ImageView
 import androidx.compose.animation.core.Spring
@@ -209,27 +210,43 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+
+private fun resolveLauncherIcon(context: Context, packageName: String, activityName: String): Drawable =
+    runCatching {
+        context.packageManager.getActivityIcon(ComponentName(packageName, activityName))
+    }.getOrElse {
+        context.packageManager.defaultActivityIcon
+    }
+
 @Composable
 fun LauncherAppIcon(title:String,packageName:String,activityName:String,badgeCount:Int=0,modifier:Modifier=Modifier,onClick:()->Unit) {
-    val context=LocalContext.current
-    val icon:Drawable=remember(packageName,activityName) {
-        runCatching { context.packageManager.getActivityIcon(ComponentName(packageName,activityName)) }.getOrNull()
-            ?: requireNotNull(context.getDrawable(android.R.drawable.sym_def_app_icon))
-    }
     val interaction=remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if(pressed).91f else 1f,spring(dampingRatio=Spring.DampingRatioMediumBouncy,stiffness=Spring.StiffnessMediumLow),label="launcher-icon-press")
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(interactionSource=interaction,indication=null,onClick=onClick),
         horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
         Box(contentAlignment=Alignment.TopEnd) {
-            AndroidView(factory={ ctx -> ImageView(ctx).apply { scaleType=ImageView.ScaleType.FIT_CENTER; contentDescription=title; setImageDrawable(icon) } },
-                update={ it.setImageDrawable(icon) },
-                modifier=Modifier.size(58.dp).graphicsLayer { scaleX=scale; scaleY=scale })
+            AndroidView(
+                factory={ ctx -> ImageView(ctx).apply {
+                    scaleType=ImageView.ScaleType.FIT_CENTER
+                    contentDescription=title
+                    tag="$packageName/$activityName"
+                    setImageDrawable(resolveLauncherIcon(ctx,packageName,activityName))
+                } },
+                update={ view ->
+                    view.contentDescription=title
+                    val key="$packageName/$activityName"
+                    if(view.tag!=key) {
+                        view.setImageDrawable(resolveLauncherIcon(view.context,packageName,activityName))
+                        view.tag=key
+                    }
+                },
+                modifier=Modifier.size(58.dp).graphicsLayer { scaleX=scale; scaleY=scale },
+            )
             if(badgeCount>0) Box(Modifier.size(18.dp).clip(CircleShape).background(VerdantColors.Berry),contentAlignment=Alignment.Center) {
                 Text(if(badgeCount>99)"99+" else badgeCount.toString(),fontSize=8.sp,color=Color.White)
             }
