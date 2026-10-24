@@ -48,6 +48,7 @@ def make_leaf(Image, ImageDraw, ImageFilter, size, seed):
     return out.filter(ImageFilter.GaussianBlur(.25))
 
 def generate(out: Path):
+    out.mkdir(parents=True, exist_ok=True)
     Image, ImageDraw, ImageFilter, ImageEnhance = pillow()
     W,H=1080,2400; rng=random.Random(42)
     # Render the nature artwork once as PNG; Compose animates these layers at runtime.
@@ -193,7 +194,7 @@ fun GardenScene(modifier: Modifier = Modifier, reduceMotion: Boolean = false, wi
         Image(painterResource(R.drawable.verdant_leaves_overlay),null,contentScale=ContentScale.FillBounds,modifier=Modifier.fillMaxSize().graphicsLayer {
             translationX=leafMotion*wind*1.25f; translationY=-leafMotion*3.5f
             rotationZ=leafMotion*if(windLevel<=0) 0f else .24f*windLevel
-            alpha=if(reduceMotion).44f else .72f
+            alpha=if (reduceMotion) 0.44f else 0.72f
         })
         Box(Modifier.fillMaxSize().background(tint.copy(alpha=when(mode){"NIGHT"->.29f;"DUSK"->.16f;else->.07f})))
     }
