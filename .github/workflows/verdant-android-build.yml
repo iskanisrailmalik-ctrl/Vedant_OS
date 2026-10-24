@@ -50,7 +50,7 @@ jobs:
         working-directory: project
         run: python3 scripts/verify_project.py
 
-      - name: Run tests, lint, and assemble debug APK
+      - name: Run tests, lint, and assemble debug launcher APK
         working-directory: project
         run: |
           chmod +x ./gradlew
@@ -73,19 +73,15 @@ jobs:
           script: |
             adb logcat -c
             adb install -r project/app/build/outputs/apk/debug/app-debug.apk
+            home_candidates="$(adb shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r')"
+            printf '%s\n' "$home_candidates" | grep -Fq 'com.verdant.os' || { echo "Verdant OS is not registered as an Android HOME activity."; printf '%s\n' "$home_candidates"; exit 1; }
             adb shell am start -W -n com.verdant.os/.MainActivity
             sleep 8
-            pid="$(adb shell pidof -s com.verdant.os | tr -d '\r')"
-            if [ -z "$pid" ]; then
-              echo "Verdant OS process not running after launch."
-              adb logcat -d -t 4000
-              exit 1
-            fi
-            if adb logcat -d -s AndroidRuntime:E | grep -E "FATAL EXCEPTION|Process: com\\.verdant\\.os"; then
-              echo "Fatal Android runtime error detected after launch."
-              exit 1
-            fi
-            echo "Verdant OS launched successfully on Android 16 emulator (PID $pid)."
+            pid="$(adb shell pidof -s com.verdant.os | tr -d '\r' || true)"
+            test -n "$pid" || { echo "Verdant OS launcher process is not running after launch."; adb logcat -d -t 4000; exit 1; }
+            adb logcat -d -s AndroidRuntime:E > /tmp/verdant-runtime.log
+            grep -Fq 'Process: com.verdant.os' /tmp/verdant-runtime.log && { echo "Fatal Android runtime error detected in Verdant OS."; cat /tmp/verdant-runtime.log; exit 1; } || true
+            echo "Verdant OS launcher registered as HOME and launched successfully (PID $pid)."
 
       - name: Upload debug APK
         if: always() && hashFiles('project/app/build/outputs/apk/debug/*.apk') != ''
