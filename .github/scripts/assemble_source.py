@@ -111,7 +111,7 @@ def main() -> None:
         # for an Android compilation run.
         docs_start = new_text.find("REQUIRED_DOCS = {")
         if docs_start >= 0:
-            docs_end = new_text.find("\\n}", docs_start)
+            docs_end = new_text.find("\n}", docs_start)
             if docs_end >= 0:
                 new_text = new_text[:docs_start] + 'REQUIRED_DOCS = {"README.md", "DEVELOPMENT_BACKLOG.csv"}' + new_text[docs_end + 2:]
         old_harness_check = '''check(harness.is_file() and harness_runner.is_file() and powershell_runner.is_file()
