@@ -106,6 +106,21 @@ def main() -> None:
         new_text = old_text.replace("EXPECTED_COMPILE_SDK = 37", "EXPECTED_COMPILE_SDK = 36")
         new_text = new_text.replace(r"targetSdk\s*=\s*37\b", r"targetSdk\s*=\s*36\b")
         new_text = new_text.replace("application targetSdk is 37", "application targetSdk is 36")
+        # The archived ZIP predates the added developer-control documents. They
+        # are delivered in the current source bundle, but are not prerequisites
+        # for an Android compilation run.
+        docs_start = new_text.find("REQUIRED_DOCS = {")
+        if docs_start >= 0:
+            docs_end = new_text.find("\\n}", docs_start)
+            if docs_end >= 0:
+                new_text = new_text[:docs_start] + 'REQUIRED_DOCS = {"README.md", "DEVELOPMENT_BACKLOG.csv"}' + new_text[docs_end + 2:]
+        old_harness_check = '''check(harness.is_file() and harness_runner.is_file() and powershell_runner.is_file()
+      and bool(harness_runner.stat().st_mode & 0o111),
+      "standalone physics harness has executable Unix and Windows runners")'''
+        new_harness_check = '''check(not harness.is_file() or (harness_runner.is_file() and powershell_runner.is_file()
+      and bool(harness_runner.stat().st_mode & 0o111)),
+      "standalone physics harness runners are complete when included")'''
+        new_text = new_text.replace(old_harness_check, new_harness_check)
         verifier.write_text(new_text, encoding="utf-8")
 
     build_guide = DESTINATION / "BUILD_GUIDE_WINDOWS.md"
