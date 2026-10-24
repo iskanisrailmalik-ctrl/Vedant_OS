@@ -203,6 +203,25 @@ def main() -> None:
         )
         app_root.write_text(app_root_text, encoding="utf-8")
 
+    # The all-app visibility permission is core to a launcher drawer that must
+    # discover arbitrary installed apps. Keep it narrowly justified and suppress
+    # the generic lint recommendation to use finite queries for targeted apps.
+    manifest_path = DESTINATION / "app" / "src/main/AndroidManifest.xml"
+    if manifest_path.is_file():
+        manifest_text = manifest_path.read_text(encoding="utf-8")
+        manifest_text = manifest_text.replace(
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">',
+            1,
+        )
+        plain_permission = '<uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />'
+        suppressed_permission = '<!-- Required to discover arbitrary installed apps for the app drawer; no inventory is uploaded or used for analytics. Review package-visibility requirements before Play distribution. -->\n    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />'
+        if plain_permission in manifest_text:
+            manifest_text = manifest_text.replace(plain_permission, suppressed_permission, 1)
+        elif 'android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission"' not in manifest_text:
+            fail("QUERY_ALL_PACKAGES permission declaration was not found")
+        manifest_path.write_text(manifest_text, encoding="utf-8")
+
     drawer_screen = DESTINATION / "feature/drawer/src/main/java/com/verdant/os/feature/drawer/DrawerScreen.kt"
     if drawer_screen.is_file():
         drawer_text = drawer_screen.read_text(encoding="utf-8")
