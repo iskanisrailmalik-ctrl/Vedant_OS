@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""Reassemble and verify the Verdant OS source package from staged text chunks."""
+"""Reassemble and verify Verdant OS source from integrity-checked repository chunks."""
 from __future__ import annotations
 
 import base64
 import hashlib
 import re
+import shutil
 import zipfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
-STAGING = ROOT / ".bootstrap"
 OUTPUT = ROOT / "VerdantOS_build_source.zip"
 DESTINATION = ROOT / "project"
 EXPECTED_ARCHIVE_SHA256 = "444c54ecf782f3898deccdccbd4966b40cffde0b3bc92ab147cca00c707226fc"
 EXPECTED_ARCHIVE_SIZE = 64744
 
-# Expected hashes are generated from the local source package before transport.
 PARTS = [
     (".bootstrap/source-part-01.b64", "66f8e3a42fefda4697d31c8e3148ac80cb4603b80f2147c358b0be210735993b"),
     (".bootstrap/source-part-02.b64", "c448c48a69fa9f8cc00a491b6b8713eb783e5a45b3634e44e384d335ef845a70"),
@@ -23,12 +22,16 @@ PARTS = [
     (".bootstrap/source-part-04.b64", "55f748163dd5f843b39114be54c60a6c79193b6699fd86553df8997f6fb09a25"),
     (".bootstrap/source-part-05.b64", "ec2ad28e8c122a5f72ee8c5b38583830eb97b0b271bcef18e020e970beb76d4f"),
     (".bootstrap/source-part-06.b64", "3578a68e0d81ca09b4a5be2573b59850c66fb20494075b28ed1f9e97340e5c9d"),
-    (".bootstrap/source-part-07.b64", "15fc1cbfed072821dd090b64c819a19e10f81d4432b7f9947789f399af2c8416"),
-    (".bootstrap/source-part-07-tail.b64", "648d61e48c721bd04c2712f8a8cddde51a9ec451722fd6e614745233492c8dbe"),
+    (".bootstrap/repair-07-01.b64", "e99a7a5ea66b1b9d83398d87cacb5612a1d99348335b90d93dcaba11d29a0208"),
+    (".bootstrap/repair-07-02.b64", "0aa0a5c68146eb62f24acb5fb6731c054ec37da97bf10b81d1391d5bb35904e7"),
+    (".bootstrap/repair-07-03.b64", "8ad0766eaaa46cf6e3ac9c4fccddb13de2618b069501b8c465e84ea3c1f65ba2"),
+    (".bootstrap/repair-07-04.b64", "93d294e8b1415c4131106ec765ea48fbbe7d2bfb32e06b1c1196aab812a68725"),
     (".bootstrap/source-part-08.b64", "dd378c58c8b5e490c77c259b7f67161df56a93961bbe0e6fce6312afdf886a58"),
     (".bootstrap/source-part-09.b64", "16b0b7135e145dcdbc4b0d2ced41773ce4ac5dcdf55ade5d7b89246f4edb2c11"),
-    (".bootstrap/source-part-10a.b64", "4e5c7f6006b55f60b7ee43531f9491e5f2fd8561bac43dbfe4f2cb65b02372f9"),
-    (".bootstrap/source-part-10b.b64", "9ae5bf7e4c6c5326a6c67819fc0334313b71c4a000bf6f095496dabeb89954ab"),
+    (".bootstrap/repair-10-01.b64", "65c5d0550e5abc4dc0d344338bf2a160a7f3f9c757da368e58e308ed2e386d6c"),
+    (".bootstrap/repair-10-02.b64", "6df3899efc06a6d9813962f855c73c7fcab673a886d071ea6bb39a0195dc59a3"),
+    (".bootstrap/repair-10-03.b64", "2eceb8f5da2dcffff594102072116cade4f10f5cfaa3785a35b57d72ec808866"),
+    (".bootstrap/repair-10-04.b64", "30238f7fc9c929f8300d4650052eef85ebcdc782b3d155985b608ba3b710eb88"),
     (".bootstrap/source-part-11.b64", "2f47afc1968e425192f95f61b604a58fec57264a748215d61773f0e220951a87"),
     (".bootstrap/source-part-12.b64", "51ef77a6fd746611f0a50a7ace12c2951c17c496602ee6fc4c1a6d0a8405e17d"),
 ]
@@ -81,13 +84,13 @@ def main() -> None:
             if not any(m.filename.endswith("gradlew") for m in members):
                 fail("archive lacks the Gradle wrapper")
             if DESTINATION.exists():
-                import shutil
                 shutil.rmtree(DESTINATION)
             archive.extractall(DESTINATION)
     except zipfile.BadZipFile as exc:
         fail(f"invalid ZIP archive: {exc}")
 
     print(f"Verified {len(PARTS)} source chunks.")
+    print(f"Verified archive size: {len(package)} bytes.")
     print(f"Verified archive SHA-256: {actual_archive_hash}")
     print(f"Extracted {len(members)} files to {DESTINATION.relative_to(ROOT)}/")
 
