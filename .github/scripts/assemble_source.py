@@ -89,46 +89,29 @@ def main() -> None:
     except zipfile.BadZipFile as exc:
         fail(f"invalid ZIP archive: {exc}")
 
-    # This checked-in bootstrap ZIP was produced before hosted SDK verification.
-    # Keep its SHA-256 immutable, then apply a deterministic source overlay based
-    # on the official stable platform available to the runner (Android 16 / API 36).
-    # Android 17 / API 37 is beta as of 2026-10-24 and is not in the stable SDK channel.
-    for path in DESTINATION.rglob("*.gradle.kts"):
-        old_text = path.read_text(encoding="utf-8")
-        new_text = old_text.replace("compileSdk = 37", "compileSdk = 36")
-        new_text = new_text.replace("targetSdk = 37", "targetSdk = 36")
-        if new_text != old_text:
-            path.write_text(new_text, encoding="utf-8")
-
-    verifier = DESTINATION / "scripts" / "verify_project.py"
-    if verifier.exists():
-        old_text = verifier.read_text(encoding="utf-8")
-        new_text = old_text.replace("EXPECTED_COMPILE_SDK = 37", "EXPECTED_COMPILE_SDK = 36")
-        new_text = new_text.replace(r"targetSdk\s*=\s*37\b", r"targetSdk\s*=\s*36\b")
-        new_text = new_text.replace("application targetSdk is 37", "application targetSdk is 36")
-        # The archived ZIP predates the added developer-control documents. They
-        # are delivered in the current source bundle, but are not prerequisites
-        # for an Android compilation run.
-        docs_start = new_text.find("REQUIRED_DOCS = {")
-        if docs_start >= 0:
-            docs_end = new_text.find("\n}", docs_start)
-            if docs_end >= 0:
-                new_text = new_text[:docs_start] + 'REQUIRED_DOCS = {"README.md", "DEVELOPMENT_BACKLOG.csv"}' + new_text[docs_end + 2:]
-        old_harness_check = '''check(harness.is_file() and harness_runner.is_file() and powershell_runner.is_file()
-      and bool(harness_runner.stat().st_mode & 0o111),
-      "standalone physics harness has executable Unix and Windows runners")'''
-        new_harness_check = '''check(not harness.is_file() or (harness_runner.is_file() and powershell_runner.is_file()
-      and bool(harness_runner.stat().st_mode & 0o111)),
-      "standalone physics harness runners are complete when included")'''
-        new_text = new_text.replace(old_harness_check, new_harness_check)
-        verifier.write_text(new_text, encoding="utf-8")
+    # Android 17 / API 37 is stable as of June 2026. Keep the project's
+    # modern Compose/AndroidX dependencies on API 37 instead of downgrading
+    # their compile SDK. targetSdk is explicitly maintained by project source.
+    # Kotlin targets JVM 21 under the configured JDK; align Java compilation.
+    for gradle_file in DESTINATION.rglob("build.gradle.kts"):
+        old_text = gradle_file.read_text(encoding="utf-8")
+        if "compileSdk = 37" in old_text and "compileOptions {" not in old_text:
+            new_text = old_text.replace(
+                "android {",
+                "android {\n    compileOptions {\n"
+                "        sourceCompatibility = JavaVersion.VERSION_21\n"
+                "        targetCompatibility = JavaVersion.VERSION_21\n"
+                "    }",
+                1,
+            )
+            gradle_file.write_text(new_text, encoding="utf-8")
 
     build_guide = DESTINATION / "BUILD_GUIDE_WINDOWS.md"
     if not build_guide.exists():
         build_guide.write_text(
             "# Verdant OS — Windows Build Guide\n\n"
             "1. Install Android Studio and JDK 21.\n"
-            "2. In SDK Manager, install Android SDK Platform 36, Platform-Tools, and Build Tools 36.0.0.\n"
+            "2. In SDK Manager, install Android SDK Platform 37, Platform-Tools, and Build Tools 36.0.0.\n"
             "3. Open this project root (the folder containing settings.gradle.kts).\n"
             "4. Allow Gradle sync to finish, then run: ./gradlew test lint :app:assembleDebug\n"
             "5. The debug APK is written to app/build/outputs/apk/debug/app-debug.apk.\n"
@@ -139,21 +122,7 @@ def main() -> None:
     nested_workflow = DESTINATION / ".github" / "workflows" / "android.yml"
     if nested_workflow.exists():
         old_text = nested_workflow.read_text(encoding="utf-8")
-        nested_workflow.write_text(old_text.replace("platforms;android-37", "platforms;android-36"), encoding="utf-8")
-
-    docs = [DESTINATION / name for name in ("README.md", "BUILD_GUIDE_WINDOWS.md", "ARCHITECTURE.md", "VALIDATION_MATRIX.md")]
-    for path in docs:
-        if path.exists():
-            old_text = path.read_text(encoding="utf-8")
-            new_text = old_text.replace("Android SDK Platform 37", "Android SDK Platform 36")
-            new_text = new_text.replace("Android SDK Platform **37**", "Android SDK Platform **36**")
-            new_text = new_text.replace("Android 17 / API 37", "Android 16 / API 36")
-            new_text = new_text.replace("API 37", "API 36")
-            new_text = new_text.replace("Android API 37", "Android API 36")
-            new_text = new_text.replace("compile/target API **37**", "compile/target API **36**")
-            new_text = new_text.replace("with API 37 installed", "with API 36 installed")
-            new_text = new_text.replace("Android 17 (API 37)", "Android 16 (API 36)")
-            path.write_text(new_text, encoding="utf-8")
+        nested_workflow.write_text(old_text.replace("platforms;android-36", "platforms;android-37"), encoding="utf-8")
 
     # Rehydrate platform-independent test/support files that were introduced
     # after the original, checksum-pinned source archive was cut.
