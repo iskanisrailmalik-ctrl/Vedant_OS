@@ -104,7 +104,7 @@ def main() -> None:
     if verifier.exists():
         old_text = verifier.read_text(encoding="utf-8")
         new_text = old_text.replace("EXPECTED_COMPILE_SDK = 37", "EXPECTED_COMPILE_SDK = 36")
-        new_text = new_text.replace(r"targetSdk\\s*=\\s*37\\b", r"targetSdk\\s*=\\s*36\\b")
+        new_text = new_text.replace(r"targetSdk\s*=\s*37\b", r"targetSdk\s*=\s*36\b")
         new_text = new_text.replace("application targetSdk is 37", "application targetSdk is 36")
         verifier.write_text(new_text, encoding="utf-8")
 
