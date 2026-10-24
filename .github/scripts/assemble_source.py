@@ -108,6 +108,19 @@ def main() -> None:
         new_text = new_text.replace("application targetSdk is 37", "application targetSdk is 36")
         verifier.write_text(new_text, encoding="utf-8")
 
+    build_guide = DESTINATION / "BUILD_GUIDE_WINDOWS.md"
+    if not build_guide.exists():
+        build_guide.write_text(
+            "# Verdant OS — Windows Build Guide\n\n"
+            "1. Install Android Studio and JDK 21.\n"
+            "2. In SDK Manager, install Android SDK Platform 36, Platform-Tools, and Build Tools 36.0.0.\n"
+            "3. Open this project root (the folder containing settings.gradle.kts).\n"
+            "4. Allow Gradle sync to finish, then run: ./gradlew test lint :app:assembleDebug\n"
+            "5. The debug APK is written to app/build/outputs/apk/debug/app-debug.apk.\n"
+            "6. Verify installation and default-launcher behavior on the Moto Edge 50 Fusion; CI is not a substitute for device testing.\n",
+            encoding="utf-8",
+        )
+
     nested_workflow = DESTINATION / ".github" / "workflows" / "android.yml"
     if nested_workflow.exists():
         old_text = nested_workflow.read_text(encoding="utf-8")
