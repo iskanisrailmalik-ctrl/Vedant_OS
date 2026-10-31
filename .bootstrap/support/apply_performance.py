@@ -148,6 +148,21 @@ def patch_app_root(project: Path) -> None:
     path.write_text(source, encoding="utf-8")
 
 
+def patch_drawer_search(project: Path) -> None:
+    path = project / "feature/drawer/src/main/java/com/verdant/os/feature/drawer/DrawerScreen.kt"
+    source = path.read_text(encoding="utf-8")
+    source = replace_once(
+        source,
+        "    val filtered = remember(apps, query) { apps.filter { it.title.contains(query.trim(), ignoreCase=true) }.sortedBy { it.title.lowercase() } }",
+        "    val normalizedQuery = query.trim()\\n"
+        "    val filtered = remember(apps, normalizedQuery) {\\n"
+        "        if (normalizedQuery.isBlank()) apps else apps.filter { it.title.contains(normalizedQuery, ignoreCase=true) }\\n"
+        "    }",
+        "avoid sorting the full app list on every search keystroke",
+    )
+    path.write_text(source, encoding="utf-8")
+
+
 def write_icon_component(project: Path) -> None:
     path = project / "core/design/src/main/java/com/verdant/os/core/design/LauncherAppIcon.kt"
     source = r'''
@@ -541,6 +556,7 @@ def main(project: Path) -> None:
     patch_preferences(project)
     patch_repository(project)
     patch_app_root(project)
+    patch_drawer_search(project)
     write_icon_component(project)
     write_wallpaper_service(project)
     update_readme(project)
