@@ -341,6 +341,7 @@ class VerdantWallpaperService : WallpaperService() {
         @Volatile private var motionEnabled = false
         @Volatile private var windLevel = 0
         @Volatile private var horizontalOffset = 0f
+        @Volatile private var timeMode = "AUTO"
 
         private var bitmap: Bitmap? = null
         private var frame = 0L
@@ -362,6 +363,7 @@ class VerdantWallpaperService : WallpaperService() {
                 preferences.settings.collect { settings: GardenSettings ->
                     motionEnabled = !(settings.reduceMotion || settings.calmMode) && settings.windLevel > 0
                     windLevel = settings.windLevel.coerceIn(0, 2)
+                    timeMode = settings.timeMode
                     handler.post {
                         handler.removeCallbacks(loop)
                         if (visible && surfaceAvailable) handler.post(loop)
@@ -489,22 +491,22 @@ class VerdantWallpaperService : WallpaperService() {
             destination.set(left, top, left + renderWidth, top + renderHeight)
             canvas.drawBitmap(image, null, destination, paint)
 
-            if (motionEnabled && windLevel > 0) {
-                val mode = when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
-                    in 5..7 -> "DAWN"
-                    in 8..16 -> "DAY"
-                    in 17..19 -> "DUSK"
-                    else -> "NIGHT"
-                }
-                val tint = when (mode) {
-                    "DAWN" -> 0x14CE865D
-                    "DAY" -> 0x084F9B69
-                    "DUSK" -> 0x1B665078
-                    else -> 0x2807172B
-                }.toInt()
-                canvas.drawColor(tint, PorterDuff.Mode.SRC_ATOP)
-                frame++
+            val mode = if (timeMode != "AUTO") timeMode else when (
+                Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            ) {
+                in 5..7 -> "DAWN"
+                in 8..16 -> "DAY"
+                in 17..19 -> "DUSK"
+                else -> "NIGHT"
             }
+            val tint = when (mode) {
+                "DAWN" -> 0x14CE865D
+                "DAY" -> 0x084F9B69
+                "DUSK" -> 0x1B665078
+                else -> 0x2807172B
+            }.toInt()
+            canvas.drawColor(tint, PorterDuff.Mode.SRC_ATOP)
+            if (motionEnabled && windLevel > 0) frame++
         }
     }
 }
