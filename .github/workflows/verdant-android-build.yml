@@ -82,9 +82,9 @@ jobs:
           script: |
             adb logcat -c
             adb install -r project/app/build/outputs/apk/debug/app-debug.apk
-            home_candidates="$(adb shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME)"
-            printf '%s\\n' "$home_candidates"
-            printf '%s\\n' "$home_candidates" | grep -Fq 'com.verdant.os' || { echo "Verdant OS is not registered as an Android HOME candidate."; exit 1; }
+            package_dump="$(adb shell dumpsys package com.verdant.os)"
+            printf '%s\\n' "$package_dump" | grep -Fq 'android.intent.category.HOME' || { echo "Verdant OS manifest was installed without the Android HOME category."; exit 1; }
+            printf '%s\\n' "$package_dump" | grep -Fq 'android.intent.category.DEFAULT' || { echo "Verdant OS HOME filter is missing CATEGORY_DEFAULT."; exit 1; }
             adb shell am start -W -n com.verdant.os/.MainActivity
             sleep 8
             pid="$(adb shell pidof -s com.verdant.os | tr -d '\r' || true)"
