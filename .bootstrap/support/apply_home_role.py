@@ -28,7 +28,17 @@ def main(project: Path) -> None:
     )
     root_text = replace_once(
         root_text,
+        "import androidx.compose.runtime.*\n",
+        "import androidx.compose.runtime.*\n"
+        "import androidx.lifecycle.Lifecycle\n"
+        "import androidx.lifecycle.LifecycleEventObserver\n"
+        "import androidx.lifecycle.compose.LocalLifecycleOwner\n",
+        "launcher lifecycle imports",
+    )
+    root_text = replace_once(
+        root_text,
         "import androidx.compose.animation.AnimatedContent\n",
+        "import androidx.activity.compose.BackHandler\n"
         "import androidx.activity.compose.rememberLauncherForActivityResult\n"
         "import androidx.activity.result.contract.ActivityResultContracts\n"
         "import androidx.compose.animation.AnimatedContent\n",
@@ -43,6 +53,13 @@ def main(project: Path) -> None:
         "        mutableStateOf(roleManager?.isRoleHeld(RoleManager.ROLE_HOME) == true)\n"
         "    }\n",
         "HOME role state",
+    )
+    root_text = replace_once(
+        root_text,
+        '    var localEventLog by remember { mutableStateOf("No recorded runtime errors.") }\n',
+        '    var localEventLog by remember { mutableStateOf("No recorded runtime errors.") }\n'
+        '    val lifecycleOwner = LocalLifecycleOwner.current\n',
+        "launcher lifecycle owner",
     )
     role_actions = '''    val homeRoleRequest = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -82,9 +99,41 @@ def main(project: Path) -> None:
         "                            onSetAsDefault={ requestDefaultHome() },",
         "HomeScreen HOME-role arguments",
     )
+    lifecycle_and_back = '''    DisposableEffect(lifecycleOwner, roleManager) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isDefaultHome = roleManager?.isRoleHeld(RoleManager.ROLE_HOME) == true
+                scope.launch { reloadApps() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    BackHandler(enabled = destination != Destination.HOME) {
+        destination = when (destination) {
+            Destination.DIAGNOSTICS -> Destination.SETTINGS
+            Destination.HOME -> Destination.HOME
+            else -> Destination.HOME
+        }
+    }
+'''
+    root_text = replace_once(
+        root_text,
+        "    LaunchedEffect(Unit) { reloadApps() }",
+        lifecycle_and_back,
+        "refresh app list and launcher navigation on resume",
+    )
     root.write_text(root_text, encoding="utf-8")
 
     home_text = home.read_text(encoding="utf-8")
+    home_text = replace_once(
+        home_text,
+        "import androidx.compose.foundation.layout.*\n",
+        "import androidx.compose.foundation.layout.*\n"
+        "import androidx.compose.foundation.gestures.detectVerticalDragGestures\n"
+        "import androidx.compose.ui.input.pointer.pointerInput\n",
+        "launcher swipe gesture imports",
+    )
     home_text = replace_once(
         home_text,
         "    highContrast: Boolean,\n    onLaunch:",
@@ -103,6 +152,27 @@ def main(project: Path) -> None:
                 }''',
         "default-home status/action",
     )
+    home_text = replace_once(
+        home_text,
+        "    Box(Modifier.fillMaxSize()) {\n",
+        """    Box(
+        Modifier.fillMaxSize().pointerInput(onOpenDrawer, onOpenShade) {
+            var totalDrag = 0f
+            detectVerticalDragGestures(
+                onDragStart = { totalDrag = 0f },
+                onVerticalDrag = { _, amount -> totalDrag += amount },
+                onDragEnd = {
+                    when {
+                        totalDrag < -72f -> onOpenDrawer()
+                        totalDrag > 96f -> onOpenShade()
+                    }
+                },
+            )
+        },
+    ) {
+""",
+        "swipe-up drawer and swipe-down shade gestures",
+    )
     home.write_text(home_text, encoding="utf-8")
 
     manifest_text = manifest.read_text(encoding="utf-8")
@@ -113,6 +183,15 @@ def main(project: Path) -> None:
     manifest_text = manifest_text.replace(
         'android:label="Verdant OS"', 'android:label="Verdant OS Launcher"', 1
     )
+    if 'android:launchMode="singleTask"' not in manifest_text:
+        activity_anchor = 'android:name=".MainActivity" android:exported="true"'
+        if activity_anchor not in manifest_text:
+            raise SystemExit("AndroidManifest.xml lacks the MainActivity launcher declaration.")
+        manifest_text = manifest_text.replace(
+            activity_anchor,
+            activity_anchor + ' android:launchMode="singleTask"',
+            1,
+        )
     manifest.write_text(manifest_text, encoding="utf-8")
 
     readme = project / "README.md"
