@@ -82,12 +82,12 @@ jobs:
           script: |
             adb logcat -c
             adb install -r project/app/build/outputs/apk/debug/app-debug.apk
-            package_dump="$(adb shell dumpsys package com.verdant.os | tr -d '\r')"
-            printf '%s\n' "$package_dump" | grep -Fq 'android.intent.category.HOME' || { echo "Verdant OS APK does not declare the Android HOME category."; printf '%s\n' "$package_dump" | grep -E -A4 'Activity Resolver Table|android.intent.action.MAIN' || true; exit 1; }
+            manifest_dump="$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print project/app/build/outputs/apk/debug/app-debug.apk)"
+            printf '%s\\n' "$manifest_dump" | grep -Fq 'android.intent.category.HOME' || { echo "Verdant OS APK does not declare the Android HOME category."; printf '%s\\n' "$manifest_dump" | grep -E -A4 'android.intent.action.MAIN' || true; exit 1; }
             adb shell am start -W -n com.verdant.os/.MainActivity
             sleep 8
             pid="$(adb shell pidof -s com.verdant.os | tr -d '\r' || true)"
             test -n "$pid" || { echo "Verdant OS launcher process is not running after launch."; adb logcat -d -t 4000; exit 1; }
             adb logcat -d -s AndroidRuntime:E > /tmp/verdant-runtime.log
             grep -Fq 'Process: com.verdant.os' /tmp/verdant-runtime.log && { echo "Fatal Android runtime error detected in Verdant OS."; cat /tmp/verdant-runtime.log; exit 1; } || true
-            echo "Verdant OS launcher registered as HOME and launched successfully (PID $pid)."
+            echo "Verdant OS is registered as an Android HOME candidate and launched successfully (PID $pid)."

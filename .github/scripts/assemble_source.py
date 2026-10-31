@@ -268,6 +268,11 @@ def main() -> None:
         fail(f"missing launcher visual patch: {launcher_patch.relative_to(ROOT)}")
     subprocess.check_call([sys.executable, str(launcher_patch), str(DESTINATION)])
 
+    home_role_patch = support / "apply_home_role.py"
+    if not home_role_patch.is_file():
+        fail(f"missing Android HOME-role patch: {home_role_patch.relative_to(ROOT)}")
+    subprocess.check_call([sys.executable, str(home_role_patch), str(DESTINATION)])
+
     print(f"Verified {len(PARTS)} source chunks.")
     print(f"Verified archive size: {len(package)} bytes.")
     print(f"Verified archive SHA-256: {actual_archive_hash}")
