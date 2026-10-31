@@ -317,7 +317,6 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import com.verdant.os.core.data.GardenSettings
 import com.verdant.os.core.data.VerdantPreferences
-import com.verdant.os.core.design.R as DesignR
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -458,7 +457,7 @@ class VerdantWallpaperService : WallpaperService() {
             }
             val decoded = BitmapFactory.decodeResource(
                 resources,
-                DesignR.drawable.verdant_garden_wallpaper,
+                R.drawable.verdant_garden_wallpaper,
                 options,
             )
             if (decoded == null) {
