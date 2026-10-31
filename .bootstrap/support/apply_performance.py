@@ -154,9 +154,9 @@ def patch_drawer_search(project: Path) -> None:
     source = replace_once(
         source,
         "    val filtered = remember(apps, query) { apps.filter { it.title.contains(query.trim(), ignoreCase=true) }.sortedBy { it.title.lowercase() } }",
-        "    val normalizedQuery = query.trim()\\n"
-        "    val filtered = remember(apps, normalizedQuery) {\\n"
-        "        if (normalizedQuery.isBlank()) apps else apps.filter { it.title.contains(normalizedQuery, ignoreCase=true) }\\n"
+        "    val normalizedQuery = query.trim()\n"
+        "    val filtered = remember(apps, normalizedQuery) {\n"
+        "        if (normalizedQuery.isBlank()) apps else apps.filter { it.title.contains(normalizedQuery, ignoreCase=true) }\n"
         "    }",
         "avoid sorting the full app list on every search keystroke",
     )
