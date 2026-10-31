@@ -46,6 +46,12 @@ def main(project: Path) -> None:
     )
     root_text = replace_once(
         root_text,
+        "    fun VerdantAppRoot() {",
+        "    fun VerdantAppRoot(homeIntentToken: Int = 0) {",
+        "Home-intent reset token parameter",
+    )
+    root_text = replace_once(
+        root_text,
         "    val snackbar = remember { SnackbarHostState() }\n",
         "    val snackbar = remember { SnackbarHostState() }\n"
         "    val roleManager = remember(context) { context.getSystemService(RoleManager::class.java) }\n"
@@ -53,6 +59,15 @@ def main(project: Path) -> None:
         "        mutableStateOf(roleManager?.isRoleHeld(RoleManager.ROLE_HOME) == true)\n"
         "    }\n",
         "HOME role state",
+    )
+    root_text = replace_once(
+        root_text,
+        "    var destination by remember { mutableStateOf(Destination.HOME) }\n",
+        "    var destination by remember { mutableStateOf(Destination.HOME) }\n"
+        "    LaunchedEffect(homeIntentToken) {\n"
+        "        if (homeIntentToken > 0) destination = Destination.HOME\n"
+        "    }\n",
+        "return to home when Android invokes the HOME activity",
     )
     root_text = replace_once(
         root_text,
@@ -124,6 +139,38 @@ def main(project: Path) -> None:
         "refresh app list and launcher navigation on resume",
     )
     root.write_text(root_text, encoding="utf-8")
+
+    main_activity = project / "app/src/main/java/com/verdant/os/MainActivity.kt"
+    main_activity_text = """package com.verdant.os
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.core.view.WindowCompat
+import com.verdant.os.core.design.VerdantTheme
+
+class MainActivity : ComponentActivity() {
+    private val homeIntentToken = mutableIntStateOf(0)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        setContent {
+            val token = homeIntentToken.intValue
+            VerdantTheme { VerdantAppRoot(homeIntentToken = token) }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        homeIntentToken.intValue++
+    }
+}
+"""
+    main_activity.write_text(main_activity_text, encoding="utf-8")
 
     home_text = home.read_text(encoding="utf-8")
     home_text = replace_once(
