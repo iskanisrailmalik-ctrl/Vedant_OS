@@ -273,6 +273,11 @@ def main() -> None:
         fail(f"missing Android HOME-role patch: {home_role_patch.relative_to(ROOT)}")
     subprocess.check_call([sys.executable, str(home_role_patch), str(DESTINATION)])
 
+    performance_patch = support / "apply_performance.py"
+    if not performance_patch.is_file():
+        fail(f"missing Phase 1 performance patch: {performance_patch.relative_to(ROOT)}")
+    subprocess.check_call([sys.executable, str(performance_patch), str(DESTINATION)])
+
     print(f"Verified {len(PARTS)} source chunks.")
     print(f"Verified archive size: {len(package)} bytes.")
     print(f"Verified archive SHA-256: {actual_archive_hash}")
