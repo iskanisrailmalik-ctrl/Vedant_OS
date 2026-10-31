@@ -46,8 +46,8 @@ def main(project: Path) -> None:
     )
     root_text = replace_once(
         root_text,
-        "    fun VerdantAppRoot() {",
-        "    fun VerdantAppRoot(homeIntentToken: Int = 0) {",
+        "fun VerdantAppRoot() {",
+        "fun VerdantAppRoot(homeIntentToken: Int = 0) {",
         "Home-intent reset token parameter",
     )
     root_text = replace_once(
