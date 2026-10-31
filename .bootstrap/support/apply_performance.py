@@ -198,7 +198,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
-import com.verdant.os.core.common.LaunchableApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -237,17 +236,20 @@ private object LauncherIconCache {
 
 @Composable
 fun LauncherAppIcon(
-    app: LaunchableApp,
+    title: String,
+    packageName: String,
+    activityName: String,
+    badgeCount: Int = 0,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current.applicationContext
     val icon = produceState<ImageBitmap?>(
         initialValue = null,
-        key1 = app.packageName,
-        key2 = app.activityName,
+        key1 = packageName,
+        key2 = activityName,
     ) {
-        value = LauncherIconCache.load(context, app.packageName, app.activityName)
+        value = LauncherIconCache.load(context, packageName, activityName)
     }.value
 
     Column(
@@ -268,13 +270,13 @@ fun LauncherAppIcon(
             if (icon != null) {
                 Image(
                     bitmap = icon,
-                    contentDescription = app.title,
+                    contentDescription = title,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.size(48.dp),
                 )
             } else {
                 Text(
-                    text = app.title.firstOrNull()?.uppercase() ?: "?",
+                    text = title.firstOrNull()?.uppercase() ?: "?",
                     color = VerdantColors.TextPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -282,7 +284,7 @@ fun LauncherAppIcon(
             }
         }
         Text(
-            text = app.title,
+            text = title,
             color = VerdantColors.TextPrimary,
             fontSize = 10.sp,
             lineHeight = 12.sp,
